@@ -1,0 +1,97 @@
+blueprint:
+  name: STYRBAR – Plafonnier CCT avec mode nuit
+  description: >
+    Pilotage complet d’un plafonnier (ON/OFF, luminosité, température)
+    avec télécommande IKEA STYRBAR via Zigbee2MQTT, incluant un mode nuit automatique.
+  domain: automation
+
+  input:
+    remote_action:
+      name: Capteur d’actions de la télécommande
+      selector:
+        entity:
+          domain: sensor
+
+    light_target:
+      name: Plafonnier
+      selector:
+        target:
+          entity:
+            domain: light
+
+    night_brightness:
+      name: Luminosité mode nuit
+      default: 40
+      selector:
+        number:
+          min: 1
+          max: 254
+
+    night_color_temp:
+      name: Température couleur mode nuit
+      default: 360
+      selector:
+        number:
+          min: 153
+          max: 370
+
+trigger:
+  - platform: state
+    entity_id: !input remote_action
+
+action:
+  - choose:
+
+      - conditions: "{{ trigger.to_state.state == 'on' }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: or
+                    conditions:
+                      - condition: sun
+                        before: sunrise
+                      - condition: sun
+                        after: sunset
+                sequence:
+                  - service: light.turn_on
+                    target: !input light_target
+                    data:
+                      brightness: !input night_brightness
+                      color_temp: !input night_color_temp
+              - conditions: []
+                sequence:
+                  - service: light.turn_on
+                    target: !input light_target
+
+      - conditions: "{{ trigger.to_state.state == 'off' }}"
+        sequence:
+          - service: light.turn_off
+            target: !input light_target
+
+      - conditions: "{{ trigger.to_state.state == 'brightness_move_up' }}"
+        sequence:
+          - service: light.turn_on
+            target: !input light_target
+            data:
+              brightness_step: 30
+
+      - conditions: "{{ trigger.to_state.state == 'brightness_move_down' }}"
+        sequence:
+          - service: light.turn_on
+            target: !input light_target
+            data:
+              brightness_step: -30
+
+      - conditions: "{{ trigger.to_state.state == 'arrow_left_click' }}"
+        sequence:
+          - service: light.turn_on
+            target: !input light_target
+            data:
+              color_temp_step: -10
+
+      - conditions: "{{ trigger.to_state.state == 'arrow_right_click' }}"
+        sequence:
+          - service: light.turn_on
+            target: !input light_target
+            data:
+              color_temp_step: 10
