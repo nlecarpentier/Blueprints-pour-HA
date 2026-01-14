@@ -1,5 +1,5 @@
 blueprint:
-  name: STYRBAR – Plafonnier CCT avec variation continue
+  name: STYRBAR – Plafonnier CCT avec variation continue stable
   description: >
     Pilotage complet d’un plafonnier CCT avec télécommande STYRBAR.
     - Clic simple pour autres automatisations
@@ -44,45 +44,26 @@ trigger:
 
 action:
   - choose:
-      # ON / Luminosité up
+      # Allumage / Luminosité up
       - conditions: "{{ trigger.to_state.state == 'brightness_move_up' }}"
         sequence:
-          - choose:
-              - conditions:
-                  - condition: state
-                    entity_id: !input light_target
-                    state: 'off'
-                sequence:
-                  - service: light.turn_on
-                    target: !input light_target
-                    data:
-                      brightness: 150
-              - conditions: []
-                sequence:
-                  - service: light.turn_on
-                    target: !input light_target
-                    data:
-                      brightness_step: 10
+          - service: light.turn_on
+            target: !input light_target
+            data:
+              brightness_step: 10
 
-      # OFF / Luminosité down
+      # Extinction / Luminosité down
       - conditions: "{{ trigger.to_state.state == 'brightness_move_down' }}"
         sequence:
-          - choose:
-              - conditions:
-                  - condition: state
-                    entity_id: !input light_target
-                    state: 'on'
-                sequence:
-                  - service: light.turn_on
-                    target: !input light_target
-                    data:
-                      brightness_step: -10
-              - conditions: []
-                sequence:
-                  - service: light.turn_off
-                    target: !input light_target
+          - service: light.turn_on
+            target: !input light_target
+            data:
+              brightness_step: -10
+          - service: light.turn_off
+            target: !input light_target
+            data: {}
 
-      # Luminosité continue UP
+      # Luminosité continue UP (hold)
       - conditions: "{{ trigger.to_state.state == 'brightness_move_up_hold' }}"
         sequence:
           - repeat_while:
@@ -96,7 +77,7 @@ action:
                   brightness_step: 10
               - delay: "00:00:00.2"
 
-      # Luminosité continue DOWN
+      # Luminosité continue DOWN (hold)
       - conditions: "{{ trigger.to_state.state == 'brightness_move_down_hold' }}"
         sequence:
           - repeat_while:
