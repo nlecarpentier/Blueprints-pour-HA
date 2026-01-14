@@ -1,0 +1,171 @@
+blueprint:
+  name: STYRBAR – Plafonnier CCT avec variation continue
+  description: >
+    Pilotage complet d’un plafonnier CCT avec télécommande STYRBAR.
+    - Clic simple pour autres automatisations
+    - Hold pour variation continue (luminosité et couleur)
+    - Allumage/extinction via brightness_move_up / brightness_move_down
+    - Mode nuit automatique (lever/coucher du soleil)
+  domain: automation
+
+  input:
+    remote_action:
+      name: Capteur d’actions de la télécommande
+      selector:
+        entity:
+          domain: sensor
+
+    light_target:
+      name: Plafonnier
+      selector:
+        target:
+          entity:
+            domain: light
+
+    night_brightness:
+      name: Luminosité mode nuit
+      default: 40
+      selector:
+        number:
+          min: 1
+          max: 254
+
+    night_color_temp:
+      name: Température couleur mode nuit
+      default: 360
+      selector:
+        number:
+          min: 153
+          max: 370
+
+trigger:
+  - platform: state
+    entity_id: !input remote_action
+
+action:
+  - choose:
+      # ON / Luminosité up
+      - conditions: "{{ trigger.to_state.state == 'brightness_move_up' }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: state
+                    entity_id: !input light_target
+                    state: 'off'
+                sequence:
+                  - service: light.turn_on
+                    target: !input light_target
+                    data:
+                      brightness: 150
+              - conditions: []
+                sequence:
+                  - service: light.turn_on
+                    target: !input light_target
+                    data:
+                      brightness_step: 10
+
+      # OFF / Luminosité down
+      - conditions: "{{ trigger.to_state.state == 'brightness_move_down' }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: state
+                    entity_id: !input light_target
+                    state: 'on'
+                sequence:
+                  - service: light.turn_on
+                    target: !input light_target
+                    data:
+                      brightness_step: -10
+              - conditions: []
+                sequence:
+                  - service: light.turn_off
+                    target: !input light_target
+
+      # Luminosité continue UP
+      - conditions: "{{ trigger.to_state.state == 'brightness_move_up_hold' }}"
+        sequence:
+          - repeat_while:
+              - condition: state
+                entity_id: !input remote_action
+                state: "brightness_move_up_hold"
+            sequence:
+              - service: light.turn_on
+                target: !input light_target
+                data:
+                  brightness_step: 10
+              - delay: "00:00:00.2"
+
+      # Luminosité continue DOWN
+      - conditions: "{{ trigger.to_state.state == 'brightness_move_down_hold' }}"
+        sequence:
+          - repeat_while:
+              - condition: state
+                entity_id: !input remote_action
+                state: "brightness_move_down_hold"
+            sequence:
+              - service: light.turn_on
+                target: !input light_target
+                data:
+                  brightness_step: -10
+              - delay: "00:00:00.2"
+
+      # Couleur + froide / + chaude clic simple
+      - conditions: "{{ trigger.to_state.state == 'arrow_left_click' }}"
+        sequence:
+          - service: light.turn_on
+            target: !input light_target
+            data:
+              color_temp_step: -10
+
+      - conditions: "{{ trigger.to_state.state == 'arrow_right_click' }}"
+        sequence:
+          - service: light.turn_on
+            target: !input light_target
+            data:
+              color_temp_step: 10
+
+      # Couleur continue hold
+      - conditions: "{{ trigger.to_state.state == 'arrow_left_hold' }}"
+        sequence:
+          - repeat_while:
+              - condition: state
+                entity_id: !input remote_action
+                state: "arrow_left_hold"
+            sequence:
+              - service: light.turn_on
+                target: !input light_target
+                data:
+                  color_temp_step: -10
+              - delay: "00:00:00.2"
+
+      - conditions: "{{ trigger.to_state.state == 'arrow_right_hold' }}"
+        sequence:
+          - repeat_while:
+              - condition: state
+                entity_id: !input remote_action
+                state: "arrow_right_hold"
+            sequence:
+              - service: light.turn_on
+                target: !input light_target
+                data:
+                  color_temp_step: 10
+              - delay: "00:00:00.2"
+
+      # Mode nuit automatique (lever/coucher)
+      - conditions: "{{ trigger.to_state.state == 'on' }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: or
+                    conditions:
+                      - condition: sun
+                        before: sunrise
+                      - condition: sun
+                        after: sunset
+                sequence:
+                  - service: light.turn_on
+                    target: !input light_target
+                    data:
+                      brightness: !input night_brightness
+                      color_temp: !input night_color_temp
