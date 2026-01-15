@@ -1,0 +1,166 @@
+blueprint:
+  name: STYRBAR – Plafonnier CCT (mémoire jour/nuit + rampe douce)
+  domain: automation
+  mode: restart
+
+  input:
+    remote_action:
+      name: Capteur actions STYRBAR
+      selector:
+        entity:
+          domain: sensor
+
+    light_target:
+      name: Plafonnier
+      selector:
+        target:
+          entity:
+            domain: light
+
+    fade_in_seconds:
+      name: Durée rampe allumage
+      default: 2
+      selector:
+        number:
+          min: 0
+          max: 10
+          unit_of_measurement: secondes
+
+    day_brightness_mem:
+      name: Mémoire luminosité jour
+      selector:
+        entity:
+          domain: input_number
+    day_ct_mem:
+      name: Mémoire CCT jour
+      selector:
+        entity:
+          domain: input_number
+    night_brightness_mem:
+      name: Mémoire luminosité nuit
+      selector:
+        entity:
+          domain: input_number
+    night_ct_mem:
+      name: Mémoire CCT nuit
+      selector:
+        entity:
+          domain: input_number
+
+trigger:
+  - platform: state
+    entity_id: !input remote_action
+
+variables:
+  is_night: "{{ is_state('sun.sun', 'below_horizon') }}"
+  mem_brightness_entity: >
+    {{ night_brightness_mem if is_night else day_brightness_mem }}
+  mem_ct_entity: >
+    {{ night_ct_mem if is_night else day_ct_mem }}
+  brightness_step: 10
+  ct_step: 8
+  min_ct: 153
+  max_ct: 370
+  delay_ms: 200
+
+action:
+  - choose:
+
+      # 🔆 ALLUMAGE avec mémoire + rampe douce
+      - conditions: "{{ trigger.to_state.state == 'brightness_move_up' }}"
+        sequence:
+          - variables:
+              mem_brightness: "{{ states(mem_brightness_entity) | int(0) }}"
+              mem_ct: "{{ states(mem_ct_entity) | int(0) }}"
+          - choose:
+              - conditions: "{{ mem_brightness > 0 and mem_ct > 0 }}"
+                sequence:
+                  - service: light.turn_on
+                    target: !input light_target
+                    data:
+                      brightness: "{{ mem_brightness }}"
+                      color_temp: "{{ mem_ct }}"
+                      transition: !input fade_in_seconds
+            default:
+              - service: light.turn_on
+                target: !input light_target
+                data:
+                  transition: !input fade_in_seconds
+
+      # 🌑 EXTINCTION
+      - conditions: "{{ trigger.to_state.state == 'brightness_move_down' }}"
+        sequence:
+          - service: light.turn_off
+            target: !input light_target
+
+      # 🔆 LUMINOSITÉ continue UP
+      - conditions: "{{ trigger.to_state.state == 'brightness_move_up_hold' }}"
+        sequence:
+          - repeat:
+              while:
+                - condition: state
+                  entity_id: !input remote_action
+                  state: "brightness_move_up_hold"
+              sequence:
+                - service: light.turn_on
+                  target: !input light_target
+                  data:
+                    brightness_step: "{{ brightness_step }}"
+                - delay:
+                    milliseconds: "{{ delay_ms }}"
+          - service: input_number.set_value
+            data:
+              entity_id: "{{ mem_brightness_entity }}"
+              value: "{{ state_attr(light_target.entity_id,'brightness') }}"
+
+      # 🔅 LUMINOSITÉ continue DOWN
+      - conditions: "{{ trigger.to_state.state == 'brightness_move_down_hold' }}"
+        sequence:
+          - repeat:
+              while:
+                - condition: state
+                  entity_id: !input remote_action
+                  state: "brightness_move_down_hold"
+              sequence:
+                - service: light.turn_on
+                  target: !input light_target
+                  data:
+                    brightness_step: "{{ -brightness_step }}"
+                - delay:
+                    milliseconds: "{{ delay_ms }}"
+          - service: input_number.set_value
+            data:
+              entity_id: "{{ mem_brightness_entity }}"
+              value: "{{ state_attr(light_target.entity_id,'brightness') }}"
+
+      # 🌈 CCT ping-pong HOLD
+      - conditions: >
+          {{ trigger.to_state.state in ['arrow_left_hold','arrow_right_hold'] }}
+        sequence:
+          - variables:
+              direction: "{{ -1 if trigger.to_state.state == 'arrow_left_hold' else 1 }}"
+          - repeat:
+              while:
+                - condition: state
+                  entity_id: !input remote_action
+                  state: "{{ trigger.to_state.state }}"
+              sequence:
+                - variables:
+                    ct: "{{ state_attr(light_target.entity_id,'color_temp') | int(300) }}"
+                - choose:
+                    - conditions: "{{ ct <= min_ct }}"
+                      sequence:
+                        - variables: { direction: 1 }
+                    - conditions: "{{ ct >= max_ct }}"
+                      sequence:
+                        - variables: { direction: -1 }
+                - service: light.turn_on
+                  target: !input light_target
+                  data:
+                    color_temp: "{{ ct + (ct_step * direction) }}"
+                - delay:
+                    milliseconds: "{{ delay_ms }}"
+          - service: input_number.set_value
+            data:
+              entity_id: "{{ mem_ct_entity }}"
+              value: "{{ state_attr(light_target.entity_id,'color_temp') }}"
