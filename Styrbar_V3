@@ -1,7 +1,6 @@
 blueprint:
   name: STYRBAR – Plafonnier CCT (mémoire jour/nuit + rampe douce)
   domain: automation
-  mode: restart
 
   input:
     remote_action:
