@@ -72,7 +72,7 @@ action:
   - choose:
 
       ####################################################
-      # 🔆 ALLUMAGE / EXTINCTION (click simple)
+      # 🔆 ALLUMAGE (click simple ON)
       ####################################################
       - conditions: "{{ trigger.to_state.state == 'on' }}"
         sequence:
@@ -105,13 +105,16 @@ action:
                     data:
                       color_temp: "{{ mem_ct }}"
                       transition: !input fade_in_seconds
-              - default:
-                  - service: light.turn_on
-                    target:
-                      entity_id: "{{ light }}"
-                    data:
-                      transition: !input fade_in_seconds
+          # Fallback simple si aucune mémoire
+          - service: light.turn_on
+            target:
+              entity_id: "{{ light }}"
+            data:
+              transition: !input fade_in_seconds
 
+      ####################################################
+      # 🔅 EXTINCTION (click simple OFF)
+      ####################################################
       - conditions: "{{ trigger.to_state.state == 'off' }}"
         sequence:
           - service: light.turn_off
