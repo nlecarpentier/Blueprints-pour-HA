@@ -3,11 +3,11 @@ blueprint:
   domain: automation
   description: >
     Pilotage complet d’un plafonnier CCT avec télécommande IKEA STYRBAR.
-    - Brightness UP click : allumage avec rampe douce + mémoire jour/nuit
-    - Brightness DOWN click : extinction
+    - Click simple : allumage/extinction (on/off)
     - HOLD : variation continue luminosité
-    - HOLD flèches : variation CCT
-    - Clics gauche/droite réservés
+    - Flèches : variation CCT
+    - Mémoire jour/nuit intégrée
+    - Rampe douce à l’allumage
 
   input:
     remote_action:
@@ -61,15 +61,9 @@ trigger:
 
 variables:
   light: !input light_entity
-
   is_night: "{{ is_state('sun.sun', 'below_horizon') }}"
-
-  mem_brightness_entity: >
-    {{ night_brightness_mem if is_night else day_brightness_mem }}
-
-  mem_ct_entity: >
-    {{ night_ct_mem if is_night else day_ct_mem }}
-
+  mem_brightness_entity: "{{ night_brightness_mem if is_night else day_brightness_mem }}"
+  mem_ct_entity: "{{ night_ct_mem if is_night else day_ct_mem }}"
   brightness_step: 10
   ct_step: 8
   delay_ms: 200
@@ -78,34 +72,22 @@ action:
   - choose:
 
       ####################################################
-      # 🔆 ALLUMAGE avec mémoire + rampe douce
+      # 🔆 ALLUMAGE / EXTINCTION (click simple)
       ####################################################
-      - conditions: "{{ trigger.to_state.state == 'brightness_move_up' }}"
+      - conditions: "{{ trigger.to_state.state == 'on' }}"
         sequence:
           - variables:
               mem_brightness: "{{ states(mem_brightness_entity) | int(0) }}"
               mem_ct: "{{ states(mem_ct_entity) | int(0) }}"
-          - choose:
-              - conditions: "{{ mem_brightness > 0 and mem_ct > 0 }}"
-                sequence:
-                  - service: light.turn_on
-                    target:
-                      entity_id: "{{ light }}"
-                    data:
-                      brightness: "{{ mem_brightness }}"
-                      color_temp: "{{ mem_ct }}"
-                      transition: !input fade_in_seconds
-            default:
-              - service: light.turn_on
-                target:
-                  entity_id: "{{ light }}"
-                data:
-                  transition: !input fade_in_seconds
+          - service: light.turn_on
+            target:
+              entity_id: "{{ light }}"
+            data:
+              brightness: "{{ mem_brightness if mem_brightness>0 else omit }}"
+              color_temp: "{{ mem_ct if mem_ct>0 else omit }}"
+              transition: !input fade_in_seconds
 
-      ####################################################
-      # 🌑 EXTINCTION
-      ####################################################
-      - conditions: "{{ trigger.to_state.state == 'brightness_move_down' }}"
+      - conditions: "{{ trigger.to_state.state == 'off' }}"
         sequence:
           - service: light.turn_off
             target:
@@ -114,13 +96,13 @@ action:
       ####################################################
       # 🔆 LUMINOSITÉ HOLD UP
       ####################################################
-      - conditions: "{{ trigger.to_state.state == 'brightness_move_up_hold' }}"
+      - conditions: "{{ trigger.to_state.state == 'brightness_move_up' }}"
         sequence:
           - repeat:
               while:
                 - condition: state
                   entity_id: !input remote_action
-                  state: brightness_move_up_hold
+                  state: brightness_move_up
               sequence:
                 - service: light.turn_on
                   target:
@@ -137,13 +119,13 @@ action:
       ####################################################
       # 🔅 LUMINOSITÉ HOLD DOWN
       ####################################################
-      - conditions: "{{ trigger.to_state.state == 'brightness_move_down_hold' }}"
+      - conditions: "{{ trigger.to_state.state == 'brightness_move_down' }}"
         sequence:
           - repeat:
               while:
                 - condition: state
                   entity_id: !input remote_action
-                  state: brightness_move_down_hold
+                  state: brightness_move_down
               sequence:
                 - service: light.turn_on
                   target:
