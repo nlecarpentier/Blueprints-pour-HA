@@ -6,7 +6,7 @@ blueprint:
     - Click simple : allumage/extinction (on/off)
     - HOLD : variation continue luminosité
     - Flèches : variation CCT
-    - Mémoire jour/nuit intégrée
+    - Mémoire jour/nuit intégrée et fiable
     - Rampe douce à l’allumage
 
   input:
@@ -77,8 +77,8 @@ action:
       - conditions: "{{ trigger.to_state.state == 'on' }}"
         sequence:
           - variables:
-              mem_brightness: "{{ states(mem_brightness_entity) | int(0) }}"
-              mem_ct: "{{ states(mem_ct_entity) | int(0) }}"
+              mem_brightness: "{{ (states(mem_brightness_entity) | float(0)) | int }}"
+              mem_ct: "{{ (states(mem_ct_entity) | float(0)) | int }}"
           - choose:
               - conditions: "{{ mem_brightness > 0 and mem_ct > 0 }}"
                 sequence:
