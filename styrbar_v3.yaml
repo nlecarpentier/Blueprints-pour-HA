@@ -9,59 +9,59 @@ blueprint:
     - Clics gauche/droite réservés
   domain: automation
 
-input:
-  remote_action:
-    name: Capteur d’actions STYRBAR
-    selector:
-      entity:
-        domain: sensor
-
-  light_target:
-    name: Plafonnier
-    selector:
-      target:
+  input:
+    remote_action:
+      name: Capteur d’actions STYRBAR
+      selector:
         entity:
-          domain: light
+          domain: sensor
 
-  fade_in_seconds:
-    name: Durée rampe d’allumage
-    default: 2
-    selector:
-      number:
-        min: 0
-        max: 10
-        unit_of_measurement: secondes
+    light_target:
+      name: Plafonnier
+      selector:
+        target:
+          entity:
+            domain: light
 
-  day_brightness_mem:
-    name: Mémoire luminosité jour
-    selector:
-      entity:
-        domain: input_number
+    fade_in_seconds:
+      name: Durée rampe d’allumage
+      default: 2
+      selector:
+        number:
+          min: 0
+          max: 10
+          unit_of_measurement: secondes
 
-  day_ct_mem:
-    name: Mémoire CCT jour
-    selector:
-      entity:
-        domain: input_number
+    day_brightness_mem:
+      name: Mémoire luminosité jour
+      selector:
+        entity:
+          domain: input_number
 
-  night_brightness_mem:
-    name: Mémoire luminosité nuit
-    selector:
-      entity:
-        domain: input_number
+    day_ct_mem:
+      name: Mémoire CCT jour
+      selector:
+        entity:
+          domain: input_number
 
-  night_ct_mem:
-    name: Mémoire CCT nuit
-    selector:
-      entity:
-        domain: input_number
+    night_brightness_mem:
+      name: Mémoire luminosité nuit
+      selector:
+        entity:
+          domain: input_number
+
+    night_ct_mem:
+      name: Mémoire CCT nuit
+      selector:
+        entity:
+          domain: input_number
 
 trigger:
   - platform: state
     entity_id: !input remote_action
 
 variables:
-  # Extraction de l’entity_id depuis le target (OBLIGATOIRE pour les templates)
+  # Extraction correcte de l’entity_id depuis un target
   light_entity: >
     {{ expand(!input light_target) | map(attribute='entity_id') | first }}
 
@@ -167,12 +167,10 @@ action:
                 - choose:
                     - conditions: "{{ ct <= min_ct }}"
                       sequence:
-                        - variables:
-                            direction: 1
+                        - variables: { direction: 1 }
                     - conditions: "{{ ct >= max_ct }}"
                       sequence:
-                        - variables:
-                            direction: -1
+                        - variables: { direction: -1 }
                 - service: light.turn_on
                   target: !input light_target
                   data:
