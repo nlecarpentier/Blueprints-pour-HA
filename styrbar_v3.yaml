@@ -1,61 +1,78 @@
 blueprint:
   name: STYRBAR – Plafonnier CCT (mémoire jour/nuit + rampe douce)
+  description: >
+    Pilotage complet d’un plafonnier CCT avec télécommande IKEA STYRBAR.
+    - Brightness UP click : allumage avec rampe douce + mémoire jour/nuit
+    - Brightness DOWN click : extinction
+    - HOLD : variation continue luminosité
+    - HOLD flèches : variation CCT ping-pong
+    - Clics gauche/droite réservés
   domain: automation
 
-  input:
-    remote_action:
-      name: Capteur actions STYRBAR
-      selector:
-        entity:
-          domain: sensor
+input:
+  remote_action:
+    name: Capteur d’actions STYRBAR
+    selector:
+      entity:
+        domain: sensor
 
-    light_target:
-      name: Plafonnier
-      selector:
-        target:
-          entity:
-            domain: light
+  light_target:
+    name: Plafonnier
+    selector:
+      target:
+        entity:
+          domain: light
 
-    fade_in_seconds:
-      name: Durée rampe allumage
-      default: 2
-      selector:
-        number:
-          min: 0
-          max: 10
-          unit_of_measurement: secondes
+  fade_in_seconds:
+    name: Durée rampe d’allumage
+    default: 2
+    selector:
+      number:
+        min: 0
+        max: 10
+        unit_of_measurement: secondes
 
-    day_brightness_mem:
-      name: Mémoire luminosité jour
-      selector:
-        entity:
-          domain: input_number
-    day_ct_mem:
-      name: Mémoire CCT jour
-      selector:
-        entity:
-          domain: input_number
-    night_brightness_mem:
-      name: Mémoire luminosité nuit
-      selector:
-        entity:
-          domain: input_number
-    night_ct_mem:
-      name: Mémoire CCT nuit
-      selector:
-        entity:
-          domain: input_number
+  day_brightness_mem:
+    name: Mémoire luminosité jour
+    selector:
+      entity:
+        domain: input_number
+
+  day_ct_mem:
+    name: Mémoire CCT jour
+    selector:
+      entity:
+        domain: input_number
+
+  night_brightness_mem:
+    name: Mémoire luminosité nuit
+    selector:
+      entity:
+        domain: input_number
+
+  night_ct_mem:
+    name: Mémoire CCT nuit
+    selector:
+      entity:
+        domain: input_number
 
 trigger:
   - platform: state
     entity_id: !input remote_action
 
 variables:
+  # Extraction de l’entity_id depuis le target (OBLIGATOIRE pour les templates)
+  light_entity: >
+    {{ expand(!input light_target) | map(attribute='entity_id') | first }}
+
   is_night: "{{ is_state('sun.sun', 'below_horizon') }}"
+
   mem_brightness_entity: >
     {{ night_brightness_mem if is_night else day_brightness_mem }}
+
   mem_ct_entity: >
     {{ night_ct_mem if is_night else day_ct_mem }}
+
   brightness_step: 10
   ct_step: 8
   min_ct: 153
@@ -92,7 +109,7 @@ action:
           - service: light.turn_off
             target: !input light_target
 
-      # 🔆 LUMINOSITÉ continue UP
+      # 🔆 LUMINOSITÉ continue UP (HOLD)
       - conditions: "{{ trigger.to_state.state == 'brightness_move_up_hold' }}"
         sequence:
           - repeat:
@@ -110,9 +127,9 @@ action:
           - service: input_number.set_value
             data:
               entity_id: "{{ mem_brightness_entity }}"
-              value: "{{ state_attr(light_target.entity_id,'brightness') }}"
+              value: "{{ state_attr(light_entity, 'brightness') }}"
 
-      # 🔅 LUMINOSITÉ continue DOWN
+      # 🔅 LUMINOSITÉ continue DOWN (HOLD)
       - conditions: "{{ trigger.to_state.state == 'brightness_move_down_hold' }}"
         sequence:
           - repeat:
@@ -130,14 +147,15 @@ action:
           - service: input_number.set_value
             data:
               entity_id: "{{ mem_brightness_entity }}"
-              value: "{{ state_attr(light_target.entity_id,'brightness') }}"
+              value: "{{ state_attr(light_entity, 'brightness') }}"
 
-      # 🌈 CCT ping-pong HOLD
+      # 🌈 CCT ping-pong (HOLD uniquement)
       - conditions: >
-          {{ trigger.to_state.state in ['arrow_left_hold','arrow_right_hold'] }}
+          {{ trigger.to_state.state in ['arrow_left_hold', 'arrow_right_hold'] }}
         sequence:
           - variables:
-              direction: "{{ -1 if trigger.to_state.state == 'arrow_left_hold' else 1 }}"
+              direction: >
+                {{ -1 if trigger.to_state.state == 'arrow_left_hold' else 1 }}
           - repeat:
               while:
                 - condition: state
@@ -145,14 +163,16 @@ action:
                   state: "{{ trigger.to_state.state }}"
               sequence:
                 - variables:
-                    ct: "{{ state_attr(light_target.entity_id,'color_temp') | int(300) }}"
+                    ct: "{{ state_attr(light_entity, 'color_temp') | int(300) }}"
                 - choose:
                     - conditions: "{{ ct <= min_ct }}"
                       sequence:
-                        - variables: { direction: 1 }
+                        - variables:
+                            direction: 1
                     - conditions: "{{ ct >= max_ct }}"
                       sequence:
-                        - variables: { direction: -1 }
+                        - variables:
+                            direction: -1
                 - service: light.turn_on
                   target: !input light_target
                   data:
@@ -162,4 +182,4 @@ action:
           - service: input_number.set_value
             data:
               entity_id: "{{ mem_ct_entity }}"
-              value: "{{ state_attr(light_target.entity_id,'color_temp') }}"
+              value: "{{ state_attr(light_entity, 'color_temp') }}"
