@@ -105,7 +105,7 @@ action:
                     data:
                       color_temp: "{{ mem_ct }}"
                       transition: !input fade_in_seconds
-          # Fallback simple si aucune mémoire
+          # Fallback simple si aucune mémoire définie
           - service: light.turn_on
             target:
               entity_id: "{{ light }}"
