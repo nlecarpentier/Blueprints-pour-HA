@@ -2,11 +2,6 @@ blueprint:
   name: STYRBAR – Plafonnier CCT (mémoire jour/nuit + rampe douce)
   description: >
     Pilotage complet d’un plafonnier CCT avec télécommande IKEA STYRBAR.
-    - Brightness UP click : allumage avec rampe douce + mémoire jour/nuit
-    - Brightness DOWN click : extinction
-    - HOLD : variation continue luminosité
-    - HOLD flèches : variation CCT ping-pong
-    - Clics gauche/droite réservés
   domain: automation
 
   input:
@@ -61,9 +56,12 @@ trigger:
     entity_id: !input remote_action
 
 variables:
-  # Extraction correcte de l’entity_id depuis un target
+  # 🔑 exposer le target pour Jinja
+  light_target_var: !input light_target
+
+  # 🔑 entity_id utilisable dans les templates
   light_entity: >
-    {{ expand(!input light_target) | map(attribute='entity_id') | first }}
+    {{ expand(light_target_var) | map(attribute='entity_id') | first }}
 
   is_night: "{{ is_state('sun.sun', 'below_horizon') }}"
 
@@ -82,26 +80,18 @@ variables:
 action:
   - choose:
 
-      # 🔆 ALLUMAGE avec mémoire + rampe douce
+      # 🔆 ALLUMAGE
       - conditions: "{{ trigger.to_state.state == 'brightness_move_up' }}"
         sequence:
           - variables:
               mem_brightness: "{{ states(mem_brightness_entity) | int(0) }}"
               mem_ct: "{{ states(mem_ct_entity) | int(0) }}"
-          - choose:
-              - conditions: "{{ mem_brightness > 0 and mem_ct > 0 }}"
-                sequence:
-                  - service: light.turn_on
-                    target: !input light_target
-                    data:
-                      brightness: "{{ mem_brightness }}"
-                      color_temp: "{{ mem_ct }}"
-                      transition: !input fade_in_seconds
-            default:
-              - service: light.turn_on
-                target: !input light_target
-                data:
-                  transition: !input fade_in_seconds
+          - service: light.turn_on
+            target: !input light_target
+            data:
+              brightness: "{{ mem_brightness if mem_brightness > 0 else omit }}"
+              color_temp: "{{ mem_ct if mem_ct > 0 else omit }}"
+              transition: !input fade_in_seconds
 
       # 🌑 EXTINCTION
       - conditions: "{{ trigger.to_state.state == 'brightness_move_down' }}"
@@ -109,7 +99,7 @@ action:
           - service: light.turn_off
             target: !input light_target
 
-      # 🔆 LUMINOSITÉ continue UP (HOLD)
+      # 🔆 HOLD UP
       - conditions: "{{ trigger.to_state.state == 'brightness_move_up_hold' }}"
         sequence:
           - repeat:
@@ -129,7 +119,7 @@ action:
               entity_id: "{{ mem_brightness_entity }}"
               value: "{{ state_attr(light_entity, 'brightness') }}"
 
-      # 🔅 LUMINOSITÉ continue DOWN (HOLD)
+      # 🔅 HOLD DOWN
       - conditions: "{{ trigger.to_state.state == 'brightness_move_down_hold' }}"
         sequence:
           - repeat:
@@ -149,7 +139,7 @@ action:
               entity_id: "{{ mem_brightness_entity }}"
               value: "{{ state_attr(light_entity, 'brightness') }}"
 
-      # 🌈 CCT ping-pong (HOLD uniquement)
+      # 🌈 CCT HOLD ping-pong
       - conditions: >
           {{ trigger.to_state.state in ['arrow_left_hold', 'arrow_right_hold'] }}
         sequence:
